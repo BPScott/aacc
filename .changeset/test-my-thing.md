@@ -1,5 +1,5 @@
 ---
-'@aacc/rollup-babel-ts': patch
+'chtsht': patch
 ---
 
 Testing snapshot releases
