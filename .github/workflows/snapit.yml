@@ -15,19 +15,18 @@ jobs:
     steps:
       - name: Validate pull request
         uses: actions/github-script@v6
-        id: pr_data
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           script: |
             try {
-             await github.rest.reactions.createForIssueComment({
+              await github.rest.reactions.createForIssueComment({
                 ...context.repo,
                 comment_id: context.payload.comment.id,
                 content: 'eyes',
               })
 
-             const actorPermission = (await github.rest.repos.getCollaboratorPermissionLevel({
+              const actorPermission = (await github.rest.repos.getCollaboratorPermissionLevel({
                 ...context.repo,
                 username: context.actor
               })).data.permission
@@ -102,15 +101,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           script: |
-            const execa = require('execa')
-
-            await execa.command('yarn run changeset version --snapshot snapshot-release', { stdio: 'inherit' })
-
-            const releaseProcess = execa.command('yarn run release -- --no-git-tags --snapshot --tag snapshot-release')
-            releaseProcess.stdout.pipe(process.stdout)
-
-            const {stdout} = await releaseProcess
-
+            await exec.exec('yarn run changeset version --snapshot snapshot-release')
+            
+            const {stdout} = await exec.getExecOutput('yarn run release -- --no-git-tags --snapshot --tag snapshot-release')
             const newTags = Array
               .from(stdout.matchAll(/New tag:\s+([^\s\n]+)/g))
               .map(([_, tag]) => tag)
