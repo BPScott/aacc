@@ -20,9 +20,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           script: |
-            console.log(context.paylaod);
             try {
-
              await github.rest.reactions.createForIssueComment({
                 ...context.repo,
                 comment_id: context.payload.comment.id,
@@ -70,7 +68,7 @@ jobs:
       - name: Checkout pull request branch
         uses: actions/checkout@v2
         with:
-          ref: format('refs/pull/{0}/merge', github.event.issue.number)
+          ref: ${{ format('refs/pull/{0}/merge', github.event.issue.number) }}
 
       # Because changeset entries are consumed and removed on the
       # 'changeset-release/main' branch, we need to reset the files
