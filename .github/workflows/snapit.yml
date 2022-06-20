@@ -2,52 +2,76 @@ name: Snapit
 
 on:
   issue_comment:
-    types: [created]
+    types:
+      - created
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 jobs:
   snapshot:
-    name: Snapshot release
-    if: |
-      github.event.issue.pull_request &&
-      github.event.comment.body == '/snapit'
+    name: Snapshot Release
+    if: github.event.issue.pull_request && github.event.comment.body == '/snapit'
     runs-on: ubuntu-latest
     steps:
-      - name: Add initial reaction
-        uses: peter-evans/create-or-update-comment@v2
-        with:
-          comment-id: ${{ github.event.comment.id }}
-          reactions: eyes
-
-      - name: Get pull request data
-        uses: actions/github-script@v3
+      - name: Validate pull request
+        uses: actions/github-script@v6
         id: pr_data
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           script: |
-            const request = {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number,
-            }
-            core.info(`Getting PR #${request.pull_number} from ${request.owner}/${request.repo}`)
+            const repoContext = {owner: context.repo.owner, repo: context.repo.repo}
+
             try {
-              const result = await github.pulls.get(request)
-              return result.data
+
+             await github.rest.reactions.createForIssueComment({
+                ...repoContext,
+                comment_id: github.event.comment.id,
+                content: 'eyes',
+              })
+
+             const actorPermission = (await github.rest.repos.getCollaboratorPermissionLevel({
+                ...repoContext,
+                username: context.actor
+              })).data.permission
+              const isPermitted = ['write', 'admin'].includes(actorPermission)
+
+              if (!isPermitted) {
+                await github.rest.issues.createComment({
+                  ...repoContext,
+                  issue_number: context.issue.number,
+                  body: "Only users with write permission to the respository can run /snapit",
+                })
+
+                core.setFailed(errorMessage)
+                return;
+              }
+
+              const pullRequest = await github.rest.pulls.get({
+                ...repoContext,
+                pull_number: context.issue.number,
+              })
+
+              // Pull request from fork
+              if (context.payload.repository.full_name !== pullRequest.data.head.repo.full_name) {
+                const errorMessage = '`/snapit` is not supported on pull requests from forked repositories.'
+
+                await github.rest.issues.createComment({
+                  ...repoContext,
+                  issue_number: context.issue.number,
+                  body: errorMessage,
+                })
+
+                core.setFailed(errorMessage)
+              }
             } catch (err) {
               core.setFailed(`Request failed with error ${err}`)
             }
 
-      - name: Log PR data
-        run: |
-          echo '${{ toJSON(github) }}'
-          echo '${{ toJSON(steps.pr_data.outputs.result) }}'
-
-      # issue_comment requires us to checkout the branch
-      # https://github.com/actions/checkout/issues/331#issuecomment-707103442
       - name: Checkout pull request branch
         uses: actions/checkout@v2
         with:
-          repository: ${{ fromJSON(steps.pr_data.outputs.result).head.repo.full_name }}
-          ref: ${{ fromJSON(steps.pr_data.outputs.result).head.sha }}
+          ref: format('refs/pull/{0}/merge', github.event.issue.number)
 
       # Because changeset entries are consumed and removed on the
       # 'changeset-release/main' branch, we need to reset the files
@@ -59,22 +83,21 @@ jobs:
             git checkout origin/main -- .changeset
           fi
 
-      - name: Setup Node.js 16
-        uses: actions/setup-node@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v2
         with:
-          node-version: 16
-          cache: 'npm'
+          node-version: 16.x
 
       - name: Install dependencies
-        run: npm ci
+        run: yarn --frozen-lockfile
 
       - name: Create an .npmrc
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           cat << EOF > "$HOME/.npmrc"
             //registry.npmjs.org/:_authToken=$NPM_TOKEN
           EOF
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create and publish snapshot release
         uses: actions/github-script@v6
@@ -84,33 +107,31 @@ jobs:
           script: |
             const execa = require('execa')
 
-            await execa.command('npm run version-packages -- --snapshot snapshot-release', { stdio: 'inherit' })
+            await execa.command('yarn run changeset version --snapshot snapshot-release', { stdio: 'inherit' })
 
-            const releaseProcess = execa.command('npm run release -- --no-git-tags --snapshot --tag snapshot-release')
+            const releaseProcess = execa.command('yarn run release -- --no-git-tags --snapshot --tag snapshot-release')
             releaseProcess.stdout.pipe(process.stdout)
 
             const {stdout} = await releaseProcess
 
-            const newTags = Array.from(
-              stdout.matchAll(/New tag:\s+([^\s\n]+)/g),
-            ).map(
-              ([_, tag]) => tag,
-            )
+            const newTags = Array
+              .from(stdout.matchAll(/New tag:\s+([^\s\n]+)/g))
+              .map(([_, tag]) => tag)
 
             if (newTags.length) {
               const multiple = newTags.length > 1
+
               const body = (
-                `**Thanks @${context.actor}! ` +
-                `Your snapshot${multiple ? 's have' : ' has'} been shipped. 🚢**\n\n` +
+                `🫰✨ **Thanks @${context.actor}! ` +
+                `Your snapshot${multiple ? 's have' : ' has'} been published to npm.**\n\n` +
                 `Test the snapshot${multiple ? 's' : ''} by updating your \`package.json\` ` +
                 `with the newly published version${multiple ? 's' : ''}:\n` +
                 newTags.map(tag => (
                   '```sh\n' +
-                  `npm i ${tag}\n` +
+                  `yarn add ${tag}\n` +
                   '```'
                 )).join('\n')
               )
-
               await github.rest.issues.createComment({
                 issue_number: context.issue.number,
                 owner: context.repo.owner,
@@ -118,13 +139,10 @@ jobs:
                 body,
               })
 
-              return true
+              await github.rest.reactions.createForIssueComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: github.event.comment.id,
+                content: 'rocket',
+              })
             }
-
-            return false
-
-      - name: Add final reaction
-        uses: peter-evans/create-or-update-comment@v2
-        with:
-          comment-id: ${{ github.event.comment.id }}
-          reactions: rocket
