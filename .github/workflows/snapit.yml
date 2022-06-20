@@ -21,12 +21,12 @@ jobs:
         with:
           script: |
             const repoContext = {owner: context.repo.owner, repo: context.repo.repo}
-            console.log(github.event);
+            console.log(context.paylaod);
             try {
 
              await github.rest.reactions.createForIssueComment({
                 ...repoContext,
-                comment_id: github.event.comment.id,
+                comment_id: context.payload.event.comment.id,
                 content: 'eyes',
               })
 
@@ -142,7 +142,7 @@ jobs:
               await github.rest.reactions.createForIssueComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                comment_id: github.event.comment.id,
+                comment_id: context.payload.event.comment.id,
                 content: 'rocket',
               })
             }
