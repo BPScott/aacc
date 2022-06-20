@@ -21,7 +21,7 @@ jobs:
         with:
           script: |
             const repoContext = {owner: context.repo.owner, repo: context.repo.repo}
-
+            console.log(github.event);
             try {
 
              await github.rest.reactions.createForIssueComment({
