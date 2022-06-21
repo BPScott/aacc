@@ -38,11 +38,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Send a push notification on publish
-        if: steps.changesets.outputs.published == 'true'
+      - name: Trigger CI
+        if: ${{ steps.changesets.outputs.pullRequestNumber }}
         run: |
-          curl -s \
-            --form-string "token=${{ secrets.PUSHOVER_TOKEN }}" \
-            --form-string "user=${{ secrets.PUSHOVER_USER }}" \
-            --form-string "message=New version(s) of @aacc was published!" \
-            https://api.pushover.net/1/messages.json
+          curl -X POST -H "Accept: application/vnd.github.v3+json" -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          https://api.github.com/repos/BPScott/aacc/actions/workflows/ci.yml/dispatches \
+          -d '{"ref":"changeset-release/main"}'
