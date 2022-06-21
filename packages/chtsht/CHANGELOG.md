@@ -1,5 +1,14 @@
 # chtsht
 
+## 0.2.1
+
+### Patch Changes
+
+- [#10](https://github.com/aaronccasanova/aacc/pull/10)
+  [`5fa37b2`](https://github.com/aaronccasanova/aacc/commit/5fa37b2bc98c460b781accfa24b738932c7eb8bf)
+  Thanks [@aaronccasanova](https://github.com/aaronccasanova)! - Testing
+  snapshot releases
+
 ## 0.2.0
 
 ### Minor Changes
